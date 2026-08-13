@@ -1642,8 +1642,50 @@ MySQLDatabase::getLastSessionStart(const std::string& device_id) {
 }
 
 std::optional<std::chrono::system_clock::time_point>
-MySQLDatabase::getSessionStartForSleepDay(const std::string&, const std::string&, bool) {
-    return std::nullopt;
+MySQLDatabase::getSessionStartForSleepDay(const std::string& device_id,
+                                           const std::string& sleep_day,
+                                           bool open_only) {
+    std::lock_guard<std::recursive_mutex> lock(mutex_);
+    if (!conn_) return std::nullopt;
+
+    // Same noon-to-noon sleep-day rule as the PostgreSQL backend
+    // (DATE(session_start - INTERVAL '12 hours')). Was a nullopt stub, which
+    // silently broke the LLM summary and force-complete endpoints on MySQL.
+    std::string sql = R"(
+        SELECT DATE_FORMAT(session_start, '%Y-%m-%d %H:%i:%s') FROM cpap_sessions
+        WHERE device_id = ?
+          AND DATE(DATE_SUB(session_start, INTERVAL 12 HOUR)) = CAST(? AS DATE)
+    )";
+    if (open_only) sql += " AND session_end IS NULL";
+    sql += " ORDER BY session_start LIMIT 1";
+
+    MysqlStmtGuard g;
+    g.stmt = mysql_stmt_init(conn_);
+    mysql_stmt_prepare(g.stmt, sql.c_str(), sql.size());
+
+    ParamBinder p(2);
+    p.bindText(0, device_id);
+    p.bindText(1, sleep_day);
+    mysql_stmt_bind_param(g.stmt, p.data());
+    mysql_stmt_execute(g.stmt);
+
+    ResultBinder r(1);
+    r.bindColString(0);
+    mysql_stmt_bind_result(g.stmt, r.data());
+    mysql_stmt_store_result(g.stmt);
+
+    if (mysql_stmt_fetch(g.stmt) != 0) return std::nullopt;
+
+    std::string ts_str = r.colText(0);
+    std::tm tm = {};
+    std::istringstream ss(ts_str);
+    ss >> std::get_time(&tm, "%Y-%m-%d %H:%M:%S");
+    if (ss.fail()) {
+        std::cerr << "MySQL: Failed to parse timestamp: " << ts_str << std::endl;
+        return std::nullopt;
+    }
+    tm.tm_isdst = -1;
+    return std::chrono::system_clock::from_time_t(std::mktime(&tm));
 }
 
 // ---------------------------------------------------------------------------

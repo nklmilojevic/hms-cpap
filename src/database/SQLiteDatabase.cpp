@@ -1194,8 +1194,40 @@ SQLiteDatabase::getNthLatestSessionStart(const std::string& device_id, int n) {
 }
 
 std::optional<std::chrono::system_clock::time_point>
-SQLiteDatabase::getSessionStartForSleepDay(const std::string&, const std::string&, bool) {
-    return std::nullopt;
+SQLiteDatabase::getSessionStartForSleepDay(const std::string& device_id,
+                                            const std::string& sleep_day,
+                                            bool open_only) {
+    std::lock_guard<std::recursive_mutex> lock(mutex_);
+    if (!db_) return std::nullopt;
+
+    // Same noon-to-noon sleep-day rule as the PostgreSQL backend
+    // (DATE(session_start - INTERVAL '12 hours')). Was a nullopt stub, which
+    // silently broke the LLM summary and force-complete endpoints on SQLite.
+    std::string sql = R"(
+        SELECT session_start FROM cpap_sessions
+        WHERE device_id = ?
+          AND date(session_start, '-12 hours') = ?
+    )";
+    if (open_only) sql += " AND session_end IS NULL";
+    sql += " ORDER BY session_start LIMIT 1";
+
+    StmtGuard g;
+    sqlite3_prepare_v2(db_, sql.c_str(), -1, &g.stmt, nullptr);
+    bind_text(g.stmt, 1, device_id);
+    bind_text(g.stmt, 2, sleep_day);
+
+    if (sqlite3_step(g.stmt) != SQLITE_ROW) return std::nullopt;
+
+    std::string ts_str = col_text(g.stmt, 0);
+    std::tm tm = {};
+    std::istringstream ss(ts_str);
+    ss >> std::get_time(&tm, "%Y-%m-%d %H:%M:%S");
+    if (ss.fail()) {
+        std::cerr << "SQLite: Failed to parse timestamp: " << ts_str << std::endl;
+        return std::nullopt;
+    }
+    tm.tm_isdst = -1;
+    return std::chrono::system_clock::from_time_t(std::mktime(&tm));
 }
 
 // ---------------------------------------------------------------------------
