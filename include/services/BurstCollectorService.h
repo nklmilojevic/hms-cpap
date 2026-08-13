@@ -430,7 +430,8 @@ private:
      * @param str_record Optional STR daily record for additional context
      */
     void generateAndPublishSummary(const SessionMetrics& metrics,
-                                   const STRDailyRecord* str_record = nullptr);
+                                   const STRDailyRecord* str_record = nullptr,
+                                   const std::string& sleep_day = "");
 
     /**
      * Build metrics string from session data for LLM prompt substitution.

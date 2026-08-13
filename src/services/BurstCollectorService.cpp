@@ -325,7 +325,7 @@ bool BurstCollectorService::generateSummaryForDate(const std::string& sleep_day)
     }
     const STRDailyRecord* str_rec = !last_str_records_.empty()
         ? &last_str_records_.back() : nullptr;
-    generateAndPublishSummary(metrics.value(), str_rec);
+    generateAndPublishSummary(metrics.value(), str_rec, sleep_day);
     return true;
 }
 
@@ -2185,7 +2185,8 @@ std::string BurstCollectorService::buildRangeMetricsString(
 // --- Daily summary (single night) ---
 
 void BurstCollectorService::generateAndPublishSummary(const SessionMetrics& metrics,
-                                                       const STRDailyRecord* str_record) {
+                                                       const STRDailyRecord* str_record,
+                                                       const std::string& requested_sleep_day) {
     std::cout << "LLM: Generating session summary..." << std::endl;
 
     std::string metrics_str = buildMetricsString(metrics, str_record);
@@ -2206,13 +2207,16 @@ void BurstCollectorService::generateAndPublishSummary(const SessionMetrics& metr
 
     // Save to DB for future UI
     if (db_service_) {
-        // Sleep day = today - 12h (session that ended this morning started last night)
-        auto now_t = std::chrono::system_clock::to_time_t(
-            std::chrono::system_clock::now() - std::chrono::hours(12));
-        std::tm* day_tm = std::localtime(&now_t);
-        std::ostringstream day_oss;
-        day_oss << std::put_time(day_tm, "%Y-%m-%d");
-        std::string sleep_day = day_oss.str();
+        std::string sleep_day = requested_sleep_day;
+        if (sleep_day.empty()) {
+            // Automatic generation runs for the night that ended this morning.
+            auto now_t = std::chrono::system_clock::to_time_t(
+                std::chrono::system_clock::now() - std::chrono::hours(12));
+            std::tm* day_tm = std::localtime(&now_t);
+            std::ostringstream day_oss;
+            day_oss << std::put_time(day_tm, "%Y-%m-%d");
+            sleep_day = day_oss.str();
+        }
 
         double hours = metrics.usage_hours.value_or(0.0);
         double compliance = (hours >= 4.0) ? 100.0 : 0.0;
