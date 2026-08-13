@@ -68,8 +68,14 @@ struct SessionFileSet {
     std::string date_folder;
     std::string session_prefix;
 
+    // Primary (first) sidecar of the group — kept for file_path columns,
+    // logging and isComplete(). The vectors below carry EVERY sidecar: a
+    // merged session has one CSL/EVE pair per mask-on block, and each EVE
+    // holds only its own block's annotations (issue #22).
     std::string csl_file;
     std::string eve_file;
+    std::vector<std::string> csl_files;
+    std::vector<std::string> eve_files;
 
     std::vector<std::string> brp_files;
     std::vector<std::string> pld_files;

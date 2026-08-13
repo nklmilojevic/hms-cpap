@@ -184,8 +184,8 @@ void BackfillService::executeBackfill(const std::string& start_date,
                 for (const auto& f : session.brp_files) stageFile(f);
                 for (const auto& f : session.pld_files) stageFile(f);
                 for (const auto& f : session.sad_files) stageFile(f);
-                if (!session.csl_file.empty()) stageFile(session.csl_file);
-                if (!session.eve_file.empty()) stageFile(session.eve_file);
+                for (const auto& f : session.csl_files) stageFile(f);
+                for (const auto& f : session.eve_files) stageFile(f);
 
                 {
                     std::lock_guard<std::mutex> lock(progress_mutex_);

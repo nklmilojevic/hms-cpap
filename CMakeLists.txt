@@ -220,9 +220,13 @@ elseif(EXISTS ${CPAPDASH_PARSER_LOCAL_DIR2}/CMakeLists.txt)
         SOURCE_DIR ${CPAPDASH_PARSER_LOCAL_DIR2}
     )
 else()
+    # Fork of v2026.1.10 (upstream already fixed the multi-BRP timestamp
+    # collision there; the stale v2026.1.3 pin was what kept shipping it) plus
+    # multi-EVE parsing (upstream hms-cpap#22). Revert to hms-homelab once
+    # multi-EVE lands upstream.
     FetchContent_Declare(cpapdash_parser
-        GIT_REPOSITORY https://github.com/hms-homelab/hms-cpapdash-parser.git
-        GIT_TAG        v2026.1.3
+        GIT_REPOSITORY https://github.com/nklmilojevic/hms-cpapdash-parser.git
+        GIT_TAG        v2026.1.10-nkl.1
     )
 endif()
 FetchContent_MakeAvailable(cpapdash_parser)

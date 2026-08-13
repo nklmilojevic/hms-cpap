@@ -245,45 +245,42 @@ SessionDiscoveryService::groupSessionsInFolder(const std::string& date_folder) {
             }
         }
 
-        // Step 4: Match CSL/EVE files to this session
-        // CSL/EVE are written when user presses STOP button
-        // Match them to the LAST session group (most recent)
-        // OR match by timestamp if CSL prefix falls within this session's time range
-
+        // Step 4: Match CSL/EVE files to this session.
+        // One CSL/EVE pair exists per mask-on block, written seconds BEFORE
+        // the block's checkpoints, and each EVE holds only its own block's
+        // annotations. Attach EVERY sidecar that belongs to this group's
+        // window (issue #22: keeping one discarded the rest of the night's
+        // events). A sidecar belongs to group i when its prefix time falls
+        // before the next group starts (60s slack covers the sidecar-before-
+        // checkpoint offset); the last group sweeps leftovers.
         bool is_last_session = (group_idx == session_groups.size() - 1);
+        auto boundary = is_last_session
+            ? std::chrono::system_clock::time_point::max()
+            : session_groups[group_idx + 1][0].timestamp - std::chrono::seconds(60);
 
-        for (auto it = csl_files.begin(); it != csl_files.end(); ++it) {
-            auto csl_time = parseSessionTime(it->first);
-
-            // Match CSL to session if:
-            // 1. This is the last session group (CSL written at end)
-            // 2. CSL timestamp is close to this session (within 12 hours)
-            auto time_diff = std::chrono::abs(csl_time - session_start);
-            bool time_match = time_diff < std::chrono::hours(12);
-
-            if (is_last_session || time_match) {
-                session.csl_file = it->second.name;
+        for (auto it = csl_files.begin(); it != csl_files.end();) {
+            if (is_last_session || parseSessionTime(it->first) < boundary) {
+                if (session.csl_file.empty()) session.csl_file = it->second.name;
+                session.csl_files.push_back(it->second.name);
                 session.total_size_kb += it->second.size_kb;
                 session.file_sizes_kb[it->second.name] = it->second.size_kb;
                 std::cout << "    CSL: " << it->second.name << std::endl;
-                csl_files.erase(it);
-                break;
+                it = csl_files.erase(it);
+            } else {
+                ++it;
             }
         }
 
-        for (auto it = eve_files.begin(); it != eve_files.end(); ++it) {
-            auto eve_time = parseSessionTime(it->first);
-
-            auto time_diff = std::chrono::abs(eve_time - session_start);
-            bool time_match = time_diff < std::chrono::hours(12);
-
-            if (is_last_session || time_match) {
-                session.eve_file = it->second.name;
+        for (auto it = eve_files.begin(); it != eve_files.end();) {
+            if (is_last_session || parseSessionTime(it->first) < boundary) {
+                if (session.eve_file.empty()) session.eve_file = it->second.name;
+                session.eve_files.push_back(it->second.name);
                 session.total_size_kb += it->second.size_kb;
                 session.file_sizes_kb[it->second.name] = it->second.size_kb;
                 std::cout << "    EVE: " << it->second.name << std::endl;
-                eve_files.erase(it);
-                break;
+                it = eve_files.erase(it);
+            } else {
+                ++it;
             }
         }
 
@@ -790,32 +787,34 @@ SessionDiscoveryService::groupLocalFolder(
             else if (cp.is_sad) session.sad_files.push_back(cp.name);
         }
 
-        // Match CSL/EVE to this session
+        // Match CSL/EVE to this session — attach EVERY sidecar in this
+        // group's window, mirroring the ezShare matcher above (issue #22).
         bool is_last_session = (group_idx == session_groups.size() - 1);
+        auto boundary = is_last_session
+            ? std::chrono::system_clock::time_point::max()
+            : session_groups[group_idx + 1][0].timestamp - std::chrono::seconds(60);
 
-        for (auto it = csl_files.begin(); it != csl_files.end(); ++it) {
-            auto csl_time = parseTime(it->first);
-            auto time_diff = std::chrono::abs(csl_time - session_start);
-            bool time_match = time_diff < std::chrono::hours(12);
-            if (is_last_session || time_match) {
-                session.csl_file = it->second.first;
+        for (auto it = csl_files.begin(); it != csl_files.end();) {
+            if (is_last_session || parseTime(it->first) < boundary) {
+                if (session.csl_file.empty()) session.csl_file = it->second.first;
+                session.csl_files.push_back(it->second.first);
                 session.total_size_kb += it->second.second;
                 session.file_sizes_kb[it->second.first] = it->second.second;
-                csl_files.erase(it);
-                break;
+                it = csl_files.erase(it);
+            } else {
+                ++it;
             }
         }
 
-        for (auto it = eve_files.begin(); it != eve_files.end(); ++it) {
-            auto eve_time = parseTime(it->first);
-            auto time_diff = std::chrono::abs(eve_time - session_start);
-            bool time_match = time_diff < std::chrono::hours(12);
-            if (is_last_session || time_match) {
-                session.eve_file = it->second.first;
+        for (auto it = eve_files.begin(); it != eve_files.end();) {
+            if (is_last_session || parseTime(it->first) < boundary) {
+                if (session.eve_file.empty()) session.eve_file = it->second.first;
+                session.eve_files.push_back(it->second.first);
                 session.total_size_kb += it->second.second;
                 session.file_sizes_kb[it->second.first] = it->second.second;
-                eve_files.erase(it);
-                break;
+                it = eve_files.erase(it);
+            } else {
+                ++it;
             }
         }
 

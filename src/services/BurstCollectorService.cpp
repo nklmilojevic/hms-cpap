@@ -390,25 +390,25 @@ bool BurstCollectorService::downloadSessionFiles(
         return false;
     };
 
-    // Download CSL (session summary) - always full download (small, doesn't grow)
-    if (!session.csl_file.empty()) {
-        std::string local_path = local_dir + "/" + session.csl_file;
-        if (data_source_->downloadFile(session.date_folder, session.csl_file, local_path)) {
+    // Download ALL CSL/EVE sidecars - always full download (small, don't grow).
+    // One pair exists per mask-on block of the session (issue #22).
+    for (const auto& filename : session.csl_files) {
+        std::string local_path = local_dir + "/" + filename;
+        if (data_source_->downloadFile(session.date_folder, filename, local_path)) {
             downloaded++;
             full_downloads++;
         } else {
-            std::cerr << "⚠️  CPAP: Failed to download CSL: " << session.csl_file << std::endl;
+            std::cerr << "⚠️  CPAP: Failed to download CSL: " << filename << std::endl;
         }
     }
 
-    // Download EVE (events) - always full download (small, doesn't grow)
-    if (!session.eve_file.empty()) {
-        std::string local_path = local_dir + "/" + session.eve_file;
-        if (data_source_->downloadFile(session.date_folder, session.eve_file, local_path)) {
+    for (const auto& filename : session.eve_files) {
+        std::string local_path = local_dir + "/" + filename;
+        if (data_source_->downloadFile(session.date_folder, filename, local_path)) {
             downloaded++;
             full_downloads++;
         } else {
-            std::cerr << "⚠️  CPAP: Failed to download EVE: " << session.eve_file << std::endl;
+            std::cerr << "⚠️  CPAP: Failed to download EVE: " << filename << std::endl;
         }
     }
 
@@ -1384,8 +1384,8 @@ bool BurstCollectorService::executeBurstCycle() {
             for (const auto& f : session.brp_files) stageFile(f);
             for (const auto& f : session.pld_files) stageFile(f);
             for (const auto& f : session.sad_files) stageFile(f);
-            if (!session.csl_file.empty()) stageFile(session.csl_file);
-            if (!session.eve_file.empty()) stageFile(session.eve_file);
+            for (const auto& f : session.csl_files) stageFile(f);
+            for (const auto& f : session.eve_files) stageFile(f);
 
             // Store checkpoint sizes for change detection on next cycle
             std::map<std::string, int> checkpoint_sizes;
